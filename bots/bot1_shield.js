@@ -122,11 +122,11 @@ function createBot1(config, sendWebhook) {
   function updatePresence(chName) {
     if (!client.user) return;
     client.user.setPresence({
-      status: 'online',
+      status: 'dnd',
       activities: [{
-        name: `🔴 24/7 en ${chName} | Meta: 1B Horas`,
+        name: `🛡️ 24/7 en ${chName}`,
         type: ActivityType.Custom,
-        state: `🔴 24/7 en ${chName} | Meta: 1B Horas`
+        state: `🛡️ 24/7 en ${chName} • Meta: 1 Billón de Horas`
       }]
     });
   }

@@ -185,9 +185,9 @@ function createBot2(config, sendWebhook) {
     client.user.setPresence({
       status: 'online',
       activities: [{
-        name: `🗣️ Leyendo chat en ${chName}`,
-        type: ActivityType.Custom,
-        state: `🗣️ Lector TTS 24/7 en ${chName}`
+        name: `/tts • Hablando en #${chName}`,
+        type: ActivityType.Listening,
+        state: `🎙️ Usa /tts o mencióname para hablar en ${chName}`
       }]
     });
   }

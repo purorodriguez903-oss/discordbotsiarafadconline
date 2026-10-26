@@ -183,13 +183,13 @@ function createBot3(config, sendWebhook) {
 
   function updatePresence(trackName) {
     if (!client.user) return;
-    const activityText = trackName ? `🎶 ${trackName}` : `📻 Música 24/7 en ${status.channelName}`;
+    const activityText = trackName ? `🎶 ${trackName}` : `📻 Radio 24/7 en ${status.channelName}`;
 
     client.user.setPresence({
       status: 'online',
       activities: [{
-        name: activityText,
-        type: ActivityType.Custom,
+        name: trackName ? `Tocando: ${trackName}` : `Radio 24/7 • /radio`,
+        type: ActivityType.Listening,
         state: activityText
       }]
     });
