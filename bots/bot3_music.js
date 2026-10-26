@@ -49,6 +49,10 @@ const RADIO_STATIONS = {
 };
 
 function createBot3(config, sendWebhook) {
+  config.token = String(config.token || '').trim().replace(/[\r\n\t]/g, '');
+  config.appId = String(config.appId || '').trim().replace(/[\r\n\t]/g, '');
+  config.channelId = String(config.channelId || '').trim().replace(/[\r\n\t]/g, '');
+
   const status = {
     name: 'Bot 3 - Música & Radio 24/7',
     tag: 'Desconectado',

@@ -26,6 +26,10 @@ class ContinuousSilenceStream extends Readable {
 }
 
 function createBot2(config, sendWebhook) {
+  config.token = String(config.token || '').trim().replace(/[\r\n\t]/g, '');
+  config.appId = String(config.appId || '').trim().replace(/[\r\n\t]/g, '');
+  config.channelId = String(config.channelId || '').trim().replace(/[\r\n\t]/g, '');
+
   const status = {
     name: 'Bot 2 - Lector TTS 24/7',
     tag: 'Desconectado',

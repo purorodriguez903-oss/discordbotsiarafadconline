@@ -4,8 +4,13 @@ const { createBot1 } = require('./bots/bot1_shield');
 const { createBot2 } = require('./bots/bot2_tts');
 const { createBot3 } = require('./bots/bot3_music');
 
-const WEBHOOK_URL = process.env.WEBHOOK_URL;
-const PORT = process.env.PORT || 8080;
+function cleanEnv(val, fallback = '') {
+  if (!val) return fallback;
+  return String(val).trim().replace(/[\r\n\t]/g, '');
+}
+
+const WEBHOOK_URL = cleanEnv(process.env.WEBHOOK_URL);
+const PORT = cleanEnv(process.env.PORT, 8080);
 const startTimestamp = Date.now();
 
 /**
@@ -46,22 +51,22 @@ console.log(`
 
 // Iniciar Bot 1
 const bot1Status = createBot1({
-  token: process.env.BOT1_TOKEN,
-  channelId: process.env.BOT1_VOICE_CHANNEL_ID || '1542358479270846565'
+  token: cleanEnv(process.env.BOT1_TOKEN),
+  channelId: cleanEnv(process.env.BOT1_VOICE_CHANNEL_ID, '1542358479270846565')
 }, sendWebhook);
 
 // Iniciar Bot 2
 const bot2Status = createBot2({
-  token: process.env.BOT2_TOKEN,
-  appId: process.env.BOT2_APP_ID || '1564177861349474407',
-  channelId: process.env.BOT2_VOICE_CHANNEL_ID || '1556120992579846224'
+  token: cleanEnv(process.env.BOT2_TOKEN),
+  appId: cleanEnv(process.env.BOT2_APP_ID, '1564177861349474407'),
+  channelId: cleanEnv(process.env.BOT2_VOICE_CHANNEL_ID, '1556120992579846224')
 }, sendWebhook);
 
 // Iniciar Bot 3
 const bot3Status = createBot3({
-  token: process.env.BOT3_TOKEN,
-  appId: process.env.BOT3_APP_ID || '1564178086487003177',
-  channelId: process.env.BOT3_VOICE_CHANNEL_ID || '1557674216340586507'
+  token: cleanEnv(process.env.BOT3_TOKEN),
+  appId: cleanEnv(process.env.BOT3_APP_ID, '1564178086487003177'),
+  channelId: cleanEnv(process.env.BOT3_VOICE_CHANNEL_ID, '1557674216340586507')
 }, sendWebhook);
 
 /**

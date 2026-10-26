@@ -22,6 +22,9 @@ class ContinuousSilenceStream extends Readable {
 }
 
 function createBot1(config, sendWebhook) {
+  config.token = String(config.token || '').trim().replace(/[\r\n\t]/g, '');
+  config.channelId = String(config.channelId || '').trim().replace(/[\r\n\t]/g, '');
+
   const status = {
     name: 'Bot 1 - Escudo 24/7',
     tag: 'Desconectado',
