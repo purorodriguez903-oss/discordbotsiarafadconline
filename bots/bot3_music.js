@@ -246,6 +246,11 @@ function createBot3(config, sendWebhook) {
     );
   });
 
+  client.on('guildCreate', async (guild) => {
+    console.log(`🎉 [Bot 3 - Música] Bot añadido a servidor: ${guild.name}. Conectando a canal de voz...`);
+    await connectVoice();
+  });
+
   // Manejador de Slash Commands
   client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
