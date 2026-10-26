@@ -1,87 +1,15 @@
 require('dotenv').config();
-const {
-  Client,
-  GatewayIntentBits,
-  ActivityType
-} = require('discord.js');
-const {
-  joinVoiceChannel,
-  createAudioPlayer,
-  createAudioResource,
-  AudioPlayerStatus,
-  VoiceConnectionStatus,
-  entersState
-} = require('@discordjs/voice');
-const { Readable } = require('stream');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const { createBot1 } = require('./bots/bot1_shield');
+const { createBot2 } = require('./bots/bot2_tts');
+const { createBot3 } = require('./bots/bot3_music');
 
-// Configuración
-const TOKEN = process.env.DISCORD_TOKEN;
-const VOICE_CHANNEL_ID = process.env.VOICE_CHANNEL_ID || '1542358479270846565';
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const PORT = process.env.PORT || 8080;
-const UPTIME_FILE = path.join(__dirname, 'uptime.json');
-
-// Marco de silencio Opus (3 bytes) para mantener activa la transmisión de voz
-const SILENCE_FRAME = Buffer.from([0xf8, 0xff, 0xfe]);
-
-class ContinuousSilenceStream extends Readable {
-  _read() {
-    this.push(SILENCE_FRAME);
-  }
-}
-
-// Variables de estado
-let connection = null;
-let audioPlayer = null;
-let reconnectCount = 0;
-let blockedKicksCount = 0;
-let connectedSince = Date.now();
-let cumulativeSeconds = 0;
-
-// Cargar o inicializar estadísticas de tiempo acumulado
-try {
-  if (fs.existsSync(UPTIME_FILE)) {
-    const raw = fs.readFileSync(UPTIME_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    cumulativeSeconds = parsed.cumulativeSeconds || 0;
-  }
-} catch (_) {}
-
-// Guardar cada 60 segundos el progreso
-setInterval(() => {
-  if (connection && connection.state.status === VoiceConnectionStatus.Ready) {
-    cumulativeSeconds += 60;
-    try {
-      fs.writeFileSync(UPTIME_FILE, JSON.stringify({
-        cumulativeSeconds,
-        lastUpdated: new Date().toISOString()
-      }, null, 2));
-    } catch (_) {}
-  }
-}, 60000);
+const startTimestamp = Date.now();
 
 /**
- * Formatea segundos a texto legible
- */
-function formatUptime(totalSec) {
-  const years = Math.floor(totalSec / (3600 * 24 * 365));
-  const days = Math.floor((totalSec % (3600 * 24 * 365)) / (3600 * 24));
-  const hours = Math.floor((totalSec % (3600 * 24)) / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-
-  const parts = [];
-  if (years > 0) parts.push(`${years}a`);
-  if (days > 0) parts.push(`${days}d`);
-  parts.push(`${hours}h ${minutes}m ${seconds}s`);
-  return parts.join(' ');
-}
-
-/**
- * Envia notificaciones por Webhook
+ * Envia notificaciones centralizadas por Webhook
  */
 async function sendWebhook(title, description, color = 0x00ff88) {
   if (!WEBHOOK_URL) return;
@@ -91,199 +19,73 @@ async function sendWebhook(title, description, color = 0x00ff88) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         embeds: [{
-          title: `🔊 ${title}`,
+          title: `🤖 ${title}`,
           description,
           color,
           timestamp: new Date().toISOString(),
-          footer: { text: 'Rafa Voice 24/7 Shield • Meta: 1,000,000,000 Horas' }
+          footer: { text: 'Rafa Discord Tri-Bot Hub 24/7 • Railway' }
         }]
       })
     });
   } catch (err) {
-    console.error('Error enviando webhook:', err.message);
+    console.error('[Webhook Error]:', err.message);
   }
 }
 
-// Inicializar cliente Discord
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates
-  ]
-});
+console.log(`
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║         🚀 INICIANDO RAFA DISCORD 3-BOTS HUB 24/7        ║
+║                                                          ║
+║   • Bot 1: Escudo 24/7 (Meta: 1 Billón de Horas)         ║
+║   • Bot 2: Lector TTS en Voz (Lee chats en voz alta)     ║
+║   • Bot 3: Música & Radio 24/7 (Lo-Fi, Reggaeton, etc.)  ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+`);
+
+// Iniciar Bot 1
+const bot1Status = createBot1({
+  token: process.env.BOT1_TOKEN,
+  channelId: process.env.BOT1_VOICE_CHANNEL_ID || '1542358479270846565'
+}, sendWebhook);
+
+// Iniciar Bot 2
+const bot2Status = createBot2({
+  token: process.env.BOT2_TOKEN,
+  appId: process.env.BOT2_APP_ID || '1564177861349474407',
+  channelId: process.env.BOT2_VOICE_CHANNEL_ID || '1556120992579846224'
+}, sendWebhook);
+
+// Iniciar Bot 3
+const bot3Status = createBot3({
+  token: process.env.BOT3_TOKEN,
+  appId: process.env.BOT3_APP_ID || '1564178086487003177',
+  channelId: process.env.BOT3_VOICE_CHANNEL_ID || '1557674216340586507'
+}, sendWebhook);
 
 /**
- * Conecta y asegura el canal de voz 24/7
+ * Formatea tiempo en días, horas, minutos
  */
-async function connectVoice() {
-  try {
-    const channel = await client.channels.fetch(VOICE_CHANNEL_ID).catch(() => null);
-    if (!channel) {
-      console.error(`❌ No se encontró el canal de voz con ID: ${VOICE_CHANNEL_ID}`);
-      return;
-    }
-
-    console.log(`📡 Conectando a canal de voz: [${channel.name}] en servidor: [${channel.guild.name}]...`);
-
-    connection = joinVoiceChannel({
-      channelId: channel.id,
-      guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
-      selfDeaf: true,
-      selfMute: false
-    });
-
-    // Crear reproductor de silencio continuo
-    if (!audioPlayer) {
-      audioPlayer = createAudioPlayer();
-      const resource = createAudioResource(new ContinuousSilenceStream(), { inputType: 'opus' });
-      audioPlayer.play(resource);
-
-      audioPlayer.on(AudioPlayerStatus.Idle, () => {
-        try {
-          const nextRes = createAudioResource(new ContinuousSilenceStream(), { inputType: 'opus' });
-          audioPlayer.play(nextRes);
-        } catch (_) {}
-      });
-
-      audioPlayer.on('error', err => {
-        console.error('Audio player warning:', err.message);
-      });
-    }
-
-    connection.subscribe(audioPlayer);
-
-    // Eventos de estado de conexión de voz
-    connection.on(VoiceConnectionStatus.Ready, () => {
-      console.log(`✅ ¡Conexión de voz ESTABLECIDA en "${channel.name}"!`);
-      updatePresence(channel.name);
-    });
-
-    connection.on(VoiceConnectionStatus.Disconnected, async () => {
-      reconnectCount++;
-      console.log(`⚠️ Desconexión detectada. Intentando reconectar de inmediato (#${reconnectCount})...`);
-      try {
-        await Promise.race([
-          entersState(connection, VoiceConnectionStatus.Signalling, 5000),
-          entersState(connection, VoiceConnectionStatus.Connecting, 5000)
-        ]);
-      } catch (_) {
-        setTimeout(connectVoice, 1000);
-      }
-    });
-
-    connection.on(VoiceConnectionStatus.Destroyed, () => {
-      console.log('⚠️ Conexión destruida. Reconectando...');
-      setTimeout(connectVoice, 1000);
-    });
-
-  } catch (err) {
-    console.error('Error al conectar al canal de voz:', err.message);
-    setTimeout(connectVoice, 3000);
-  }
+function getUptimeString() {
+  const diffSec = Math.floor((Date.now() - startTimestamp) / 1000);
+  const d = Math.floor(diffSec / 86400);
+  const h = Math.floor((diffSec % 86400) / 3600);
+  const m = Math.floor((diffSec % 3600) / 60);
+  const s = diffSec % 60;
+  return `${d}d ${h}h ${m}m ${s}s`;
 }
 
-/**
- * Actualiza la presencia del bot en Discord
- */
-function updatePresence(channelName = 'BOTS SERVIDOR') {
-  if (!client.user) return;
-  const currentTotalHours = ((cumulativeSeconds + Math.floor((Date.now() - connectedSince) / 1000)) / 3600).toFixed(1);
-  const progressPercent = ((currentTotalHours / 1000000000) * 100).toFixed(6);
-
-  client.user.setPresence({
-    status: 'online',
-    activities: [{
-      name: `24/7 en ${channelName} | ${currentTotalHours}h / 1B h (${progressPercent}%)`,
-      type: ActivityType.Custom,
-      state: `🔴 24/7 en ${channelName} | Meta: 1B Horas`
-    }]
-  });
-}
-
-// Evento: Bot listo
-client.once('ready', async () => {
-  connectedSince = Date.now();
-  console.log(`====================================================`);
-  console.log(`   🤖 Bot iniciado como: ${client.user.tag}`);
-  console.log(`   🎯 Canal Objetivo: ${VOICE_CHANNEL_ID}`);
-  console.log(`   🚀 Objetivo: 1,000,000,000 Horas Online 24/7`);
-  console.log(`====================================================`);
-
-  await connectVoice();
-
-  // Notificar al Webhook de Discord
-  sendWebhook(
-    'Bot 24/7 Activado y Conectado',
-    `**Bot:** ${client.user.tag}\n**Canal de Voz:** <#${VOICE_CHANNEL_ID}>\n**Estado:** 🟢 Conexión Permanente Blindada\n**Meta:** 1,000,000,000 Horas sin apagarse.`
-  );
-});
-
-// ESCUDO ANTI-KICK: Si alguien saca o mueve al bot, se reconecta en 500ms
-client.on('voiceStateUpdate', async (oldState, newState) => {
-  if (oldState.member?.id === client.user?.id) {
-    // Si fue desconectado del canal de voz
-    if (!newState.channelId) {
-      blockedKicksCount++;
-      console.log(`🛡️ [ESCUDO] Intento de expulsión/desconexión detectado (#${blockedKicksCount}). Reconectando...`);
-      setTimeout(connectVoice, 500);
-
-      sendWebhook(
-        'Intento de Desconexión Neutralizado',
-        `Alguien intentó sacar al bot del canal de voz.\n🛡️ **Escudo Activado:** Reconectado automáticamente en 500ms.\n**Expulsiones bloqueadas:** ${blockedKicksCount}`,
-        0xffaa00
-      );
-    }
-    // Si lo movieron a otro canal distinto al objetivo
-    else if (newState.channelId !== VOICE_CHANNEL_ID) {
-      console.log(`🛡️ [ESCUDO] El bot fue movido a otro canal. Regresando a canal objetivo...`);
-      setTimeout(connectVoice, 500);
-    }
-  }
-});
-
-// Guardián recurrente cada 15 segundos (vigilancia de canal)
-setInterval(() => {
-  if (!client.isReady()) return;
-
-  const channel = client.channels.cache.get(VOICE_CHANNEL_ID);
-  const isMemberInChannel = channel?.members?.has(client.user?.id);
-
-  if (!isMemberInChannel || !connection || connection.state.status !== VoiceConnectionStatus.Ready) {
-    console.log('🔄 [GUARDIÁN] El bot no está en el canal objetivo. Forzando reconexión...');
-    connectVoice();
-  } else {
-    updatePresence(channel.name);
-  }
-}, 15000);
-
-// Reporte periódico al webhook cada 12 horas
-setInterval(() => {
-  const currentTotalSec = cumulativeSeconds + Math.floor((Date.now() - connectedSince) / 1000);
-  const formatted = formatUptime(currentTotalSec);
-  const hours = (currentTotalSec / 3600).toFixed(2);
-
-  sendWebhook(
-    'Reporte de Tiempo 24/7',
-    `⏱️ **Tiempo Acumulado:** ${formatted} (${hours} Horas)\n🛡️ **Intentos de expulsión bloqueados:** ${blockedKicksCount}\n🎯 **Progreso a 1 Billón:** ${((hours / 1000000000) * 100).toFixed(6)}%`
-  );
-}, 12 * 3600 * 1000);
-
-// Servidor Web para Railway / Monitoreo / UptimeRobot
+// Servidor Web central para Railway y UptimeRobot
 const server = http.createServer((req, res) => {
-  const currentTotalSec = cumulativeSeconds + Math.floor((Date.now() - connectedSince) / 1000);
-  const formattedTime = formatUptime(currentTotalSec);
-  const currentHours = (currentTotalSec / 3600).toFixed(2);
-  const progress = ((currentHours / 1000000000) * 100).toFixed(8);
-
   if (req.url === '/health' || req.url === '/ping') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({
       status: 'online',
-      connected: !!connection && connection.state.status === VoiceConnectionStatus.Ready,
-      hours: currentHours,
-      uptime: formattedTime,
-      blockedKicks: blockedKicksCount
+      uptime: getUptimeString(),
+      bot1: bot1Status,
+      bot2: bot2Status,
+      bot3: bot3Status
     }));
   }
 
@@ -293,8 +95,8 @@ const server = http.createServer((req, res) => {
     <html lang="es">
     <head>
       <meta charset="UTF-8">
-      <title>Rafa 24/7 Voice Bot • 1B Hours Shield</title>
-      <meta http-equiv="refresh" content="30">
+      <title>Rafa 3-Bots Hub 24/7</title>
+      <meta http-equiv="refresh" content="20">
       <style>
         * { box-sizing: border-box; }
         body {
@@ -309,112 +111,113 @@ const server = http.createServer((req, res) => {
           padding: 20px;
         }
         .container {
-          background: #111827;
-          border: 1px solid #1f2937;
-          padding: 35px;
-          border-radius: 20px;
-          box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-          max-width: 500px;
+          max-width: 800px;
           width: 100%;
+        }
+        .header {
           text-align: center;
+          margin-bottom: 30px;
         }
-        .status-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: #064e3b;
-          color: #34d399;
-          padding: 6px 16px;
-          border-radius: 30px;
-          font-weight: 700;
-          font-size: 13px;
-          text-transform: uppercase;
-          margin-bottom: 20px;
-        }
-        .status-dot {
-          width: 10px;
-          height: 10px;
-          background: #10b981;
-          border-radius: 50%;
-          animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(0.85); }
-        }
-        h1 { margin: 0 0 8px; font-size: 26px; color: #fff; }
-        p.sub { color: #94a3b8; font-size: 14px; margin: 0 0 25px; }
+        h1 { margin: 0 0 10px; font-size: 28px; color: #fff; }
+        p.sub { color: #94a3b8; font-size: 14px; margin: 0; }
         .grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 15px;
-          margin-bottom: 25px;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 20px;
         }
-        .box {
-          background: #1e293b;
-          padding: 16px;
-          border-radius: 12px;
-          text-align: left;
+        .card {
+          background: #111827;
+          border: 1px solid #1f2937;
+          padding: 24px;
+          border-radius: 16px;
+          box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
         }
-        .box .label { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; }
-        .box .val { font-size: 18px; color: #f8fafc; font-weight: 700; margin-top: 4px; word-break: break-all; }
-        .progress-box {
-          background: #1e293b;
-          padding: 18px;
-          border-radius: 12px;
-          margin-bottom: 20px;
-          text-align: left;
+        .badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 4px 10px;
+          border-radius: 20px;
+          text-transform: uppercase;
+          margin-bottom: 12px;
+          width: fit-content;
         }
-        .progress-bar-bg {
-          background: #334155;
-          height: 10px;
-          border-radius: 10px;
-          overflow: hidden;
-          margin-top: 10px;
+        .badge.online { background: #064e3b; color: #34d399; }
+        .badge.offline { background: #7f1d1d; color: #f87171; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot.online { background: #10b981; animation: pulse 1.5s infinite; }
+        .dot.offline { background: #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .bot-title { font-size: 18px; font-weight: 700; margin: 0 0 6px; color: #fff; }
+        .bot-role { font-size: 12px; color: #38bdf8; font-weight: 600; margin-bottom: 15px; }
+        .info-row { font-size: 13px; color: #94a3b8; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        .info-row span { color: #f1f5f9; font-weight: 600; }
+        .footer {
+          text-align: center;
+          margin-top: 30px;
+          font-size: 13px;
+          color: #64748b;
         }
-        .progress-bar-fill {
-          background: linear-gradient(90deg, #10b981, #06b6d4);
-          height: 100%;
-          width: ${Math.max(0.1, parseFloat(progress))}%;
-        }
-        .footer { font-size: 12px; color: #475569; margin-top: 15px; }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="status-badge">
-          <div class="status-dot"></div>
-          24/7 Conectado y Blindado
+        <div class="header">
+          <h1>🤖 Rafa Discord 3-Bots Hub 24/7</h1>
+          <p class="sub">Tiempo de Actividad General: <b>${getUptimeString()}</b> • Servidor RAFA PANEL</p>
         </div>
-        <h1>Rafa Voice 24/7</h1>
-        <p class="sub">Canal de Voz Permanente • Servidor RAFA PANEL</p>
 
         <div class="grid">
-          <div class="box">
-            <div class="label">Canal Objetivo</div>
-            <div class="val">BOTS SERVIDOR</div>
+          <!-- BOT 1 -->
+          <div class="card">
+            <div>
+              <div class="badge ${bot1Status.connected ? 'online' : 'offline'}">
+                <div class="dot ${bot1Status.connected ? 'online' : 'offline'}"></div>
+                ${bot1Status.connected ? '24/7 Conectado' : 'Conectando'}
+              </div>
+              <div class="bot-title">${bot1Status.tag !== 'Desconectado' ? bot1Status.tag : 'Rafa craker'}</div>
+              <div class="bot-role">🛡️ Escudo 24/7 (Meta: 1B Horas)</div>
+              <div class="info-row">Canal: <span>${bot1Status.channelName}</span></div>
+              <div class="info-row">Expulsiones evitadas: <span>${bot1Status.kicksBlocked}</span></div>
+            </div>
           </div>
-          <div class="box">
-            <div class="label">Expulsiones Evitadas</div>
-            <div class="val" style="color: #38bdf8;">${blockedKicksCount}</div>
-          </div>
-        </div>
 
-        <div class="progress-box">
-          <div style="display:flex; justify-content:space-between; font-size:13px;">
-            <span style="color:#94a3b8;">Progreso hacia 1 Billón de Horas</span>
-            <span style="color:#10b981; font-weight:bold;">${currentHours}h</span>
+          <!-- BOT 2 -->
+          <div class="card">
+            <div>
+              <div class="badge ${bot2Status.connected ? 'online' : 'offline'}">
+                <div class="dot ${bot2Status.connected ? 'online' : 'offline'}"></div>
+                ${bot2Status.connected ? '24/7 Conectado' : 'Conectando'}
+              </div>
+              <div class="bot-title">${bot2Status.tag !== 'Desconectado' ? bot2Status.tag : 'RafaModzYT TTS'}</div>
+              <div class="bot-role">🗣️ Lector TTS de Chat en Voz</div>
+              <div class="info-row">Canal: <span>${bot2Status.channelName}</span></div>
+              <div class="info-row">Mensajes leídos: <span>${bot2Status.messagesSpoken}</span></div>
+            </div>
           </div>
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill"></div>
-          </div>
-          <div style="margin-top: 8px; font-size: 12px; color: #64748b;">
-            Tiempo en vivo: <b>${formattedTime}</b> (${progress}%)
+
+          <!-- BOT 3 -->
+          <div class="card">
+            <div>
+              <div class="badge ${bot3Status.connected ? 'online' : 'offline'}">
+                <div class="dot ${bot3Status.connected ? 'online' : 'offline'}"></div>
+                ${bot3Status.connected ? '24/7 Conectado' : 'Esperando Invitación'}
+              </div>
+              <div class="bot-title">${bot3Status.tag !== 'Desconectado' ? bot3Status.tag : 'RafaModzYT Music'}</div>
+              <div class="bot-role">📻 Música & Radio 24/7</div>
+              <div class="info-row">Canal: <span>${bot3Status.channelName}</span></div>
+              <div class="info-row">Estado: <span>${bot3Status.currentTrack}</span></div>
+            </div>
           </div>
         </div>
 
         <div class="footer">
-          Auto-reconexión activa • Transmisión silenciosa continua Opus
+          Auto-reconexión 500ms • Transmisión silenciosa continua Opus • Desplegado en Railway
         </div>
       </div>
     </body>
@@ -423,19 +226,13 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🌐 Servidor de monitoreo y Railway activo en puerto: ${PORT}`);
+  console.log(`🌐 Servidor de monitoreo central activo en puerto: ${PORT}`);
 });
 
-// Manejo de errores no capturados para que el proceso NUNCA muera
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection detectado (ignorado para mantener 24/7):', reason);
+// Manejo de errores globales
+process.on('unhandledRejection', reason => {
+  console.error('[Unhandled Rejection]:', reason);
 });
-
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception detectado (ignorado para mantener 24/7):', err);
-});
-
-// Iniciar sesión en Discord
-client.login(TOKEN).catch(err => {
-  console.error('Error fatal al iniciar sesión en Discord:', err);
+process.on('uncaughtException', err => {
+  console.error('[Uncaught Exception]:', err);
 });
