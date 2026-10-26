@@ -76,22 +76,16 @@ function createBot3(config, sendWebhook) {
     try {
       const channel = await client.channels.fetch(config.channelId).catch(() => null);
       if (!channel) {
-        console.error(`[Bot 3 - Música] No se encontró o falta acceso al canal de voz: ${config.channelId}`);
-        console.log(`👉 Asegúrate de invitar al Bot 3 con este enlace:\nhttps://discord.com/api/oauth2/authorize?client_id=${config.appId}&permissions=8&scope=bot%20applications.commands`);
+        console.error(`[Bot 3 - Música] No se encontró o falta invitar al bot al canal: ${config.channelId}`);
         return;
       }
 
       status.channelName = channel.name;
 
-      if (connection) {
-        if (connection.state.status === VoiceConnectionStatus.Ready) {
-          status.connected = true;
-          return;
-        }
-        if (connection.state.status === VoiceConnectionStatus.Connecting || connection.state.status === VoiceConnectionStatus.Signalling) {
-          return;
-        }
-        try { connection.destroy(); } catch (_) {}
+      // Si ya está conectado y en el canal correcto, salir
+      if (connection && connection.joinConfig?.channelId === config.channelId && connection.state.status === VoiceConnectionStatus.Ready) {
+        status.connected = true;
+        return;
       }
 
       connection = joinVoiceChannel({
@@ -99,7 +93,8 @@ function createBot3(config, sendWebhook) {
         guildId: channel.guild.id,
         adapterCreator: channel.guild.voiceAdapterCreator,
         selfDeaf: false,
-        selfMute: false
+        selfMute: false,
+        group: client.user.id
       });
 
       if (!audioPlayer) {
@@ -120,29 +115,32 @@ function createBot3(config, sendWebhook) {
 
       connection.subscribe(audioPlayer);
 
-      connection.on(VoiceConnectionStatus.Ready, () => {
-        status.connected = true;
-        console.log(`✅ [Bot 3 - Música] Conectado en voz: "${channel.name}"`);
-        updatePresence();
-        if (!isPlayingMusic) playSilence();
-      });
+      entersState(connection, VoiceConnectionStatus.Ready, 15000)
+        .then(() => {
+          status.connected = true;
+          console.log(`✅ [Bot 3 - Música] Conectado en canal exclusivo: "${channel.name}" (${config.channelId})`);
+          updatePresence();
+          if (!isPlayingMusic) playSilence();
+        })
+        .catch(err => {
+          console.error('[Bot 3 - Música] Error esperando estado Ready:', err.message);
+        });
 
-      connection.on(VoiceConnectionStatus.Disconnected, async () => {
-        status.connected = false;
-        try {
-          await Promise.race([
-            entersState(connection, VoiceConnectionStatus.Signalling, 5000),
-            entersState(connection, VoiceConnectionStatus.Connecting, 5000)
-          ]);
-        } catch (_) {
-          setTimeout(connectVoice, 1000);
-        }
-      });
+      if (!connection._hasListeners) {
+        connection._hasListeners = true;
 
-      connection.on(VoiceConnectionStatus.Destroyed, () => {
-        status.connected = false;
-        setTimeout(connectVoice, 1000);
-      });
+        connection.on(VoiceConnectionStatus.Disconnected, async () => {
+          status.connected = false;
+          try {
+            await Promise.race([
+              entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+              entersState(connection, VoiceConnectionStatus.Connecting, 5000)
+            ]);
+          } catch (_) {
+            setTimeout(connectVoice, 1000);
+          }
+        });
+      }
 
     } catch (err) {
       console.error('[Bot 3 - Música] Error conectando voz:', err.message);
@@ -289,28 +287,37 @@ function createBot3(config, sendWebhook) {
     }
   });
 
-  // Escudo anti-kick
+  // Escudo anti-kick y anti-movimiento no autorizado
   client.on('voiceStateUpdate', async (oldState, newState) => {
-    if (oldState.member?.id === client.user?.id) {
-      if (!newState.channelId) {
-        status.kicksBlocked++;
-        console.log(`🛡️ [Bot 3 - Música] Intento de expulsión neutralizado (#${status.kicksBlocked}). Reconectando...`);
-        setTimeout(connectVoice, 500);
-      } else if (newState.channelId !== config.channelId) {
-        setTimeout(connectVoice, 500);
-      }
+    if (newState.id !== client.user?.id) return;
+
+    const currentChannelId = newState.channelId;
+
+    if (!currentChannelId) {
+      status.kicksBlocked++;
+      status.connected = false;
+      console.log(`🛡️ [Bot 3 - Música] Expulsión detectada (#${status.kicksBlocked}). Reconectando a ${config.channelId}...`);
+      setTimeout(connectVoice, 500);
+    } else if (currentChannelId !== config.channelId) {
+      status.kicksBlocked++;
+      console.log(`🛡️ [Bot 3 - Música] Movimiento no autorizado a ${currentChannelId}. Regresando a canal objetivo ${config.channelId}...`);
+      setTimeout(connectVoice, 500);
+    } else {
+      status.connected = true;
     }
   });
 
-  // Guardián cada 15 segundos
-  setInterval(() => {
+  // Guardián cada 10 segundos
+  setInterval(async () => {
     if (!client.isReady()) return;
-    const channel = client.channels.cache.get(config.channelId);
-    const inChannel = channel?.members?.has(client.user?.id);
-    if (!inChannel || !connection || (connection.state.status !== VoiceConnectionStatus.Ready && connection.state.status !== VoiceConnectionStatus.Connecting && connection.state.status !== VoiceConnectionStatus.Signalling)) {
-      connectVoice();
-    }
-  }, 15000);
+    try {
+      const channel = await client.channels.fetch(config.channelId).catch(() => null);
+      const isHere = channel?.members?.has(client.user?.id);
+      if (!isHere || !connection || connection.state.status !== VoiceConnectionStatus.Ready) {
+        connectVoice();
+      }
+    } catch (_) {}
+  }, 10000);
 
   client.login(config.token).catch(err => {
     console.error('[Bot 3 - Música] Error en login:', err.message);

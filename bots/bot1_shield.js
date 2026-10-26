@@ -52,15 +52,10 @@ function createBot1(config, sendWebhook) {
 
       status.channelName = channel.name;
 
-      if (connection) {
-        if (connection.state.status === VoiceConnectionStatus.Ready) {
-          status.connected = true;
-          return;
-        }
-        if (connection.state.status === VoiceConnectionStatus.Connecting || connection.state.status === VoiceConnectionStatus.Signalling) {
-          return;
-        }
-        try { connection.destroy(); } catch (_) {}
+      // Si ya está conectado y en el canal objetivo en estado Ready, todo en orden
+      if (connection && connection.joinConfig?.channelId === config.channelId && connection.state.status === VoiceConnectionStatus.Ready) {
+        status.connected = true;
+        return;
       }
 
       connection = joinVoiceChannel({
@@ -68,7 +63,8 @@ function createBot1(config, sendWebhook) {
         guildId: channel.guild.id,
         adapterCreator: channel.guild.voiceAdapterCreator,
         selfDeaf: true,
-        selfMute: false
+        selfMute: false,
+        group: client.user.id
       });
 
       if (!audioPlayer) {
@@ -87,28 +83,32 @@ function createBot1(config, sendWebhook) {
 
       connection.subscribe(audioPlayer);
 
-      connection.on(VoiceConnectionStatus.Ready, () => {
-        status.connected = true;
-        console.log(`✅ [Bot 1] Conectado 24/7 en voz: "${channel.name}"`);
-        updatePresence(channel.name);
-      });
+      entersState(connection, VoiceConnectionStatus.Ready, 15000)
+        .then(() => {
+          status.connected = true;
+          console.log(`✅ [Bot 1] Conectado 24/7 en canal exclusivo: "${channel.name}" (${config.channelId})`);
+          updatePresence(channel.name);
+        })
+        .catch(err => {
+          console.error('[Bot 1] Error esperando estado Ready:', err.message);
+          setTimeout(connectVoice, 2000);
+        });
 
-      connection.on(VoiceConnectionStatus.Disconnected, async () => {
-        status.connected = false;
-        try {
-          await Promise.race([
-            entersState(connection, VoiceConnectionStatus.Signalling, 5000),
-            entersState(connection, VoiceConnectionStatus.Connecting, 5000)
-          ]);
-        } catch (_) {
-          setTimeout(connectVoice, 1000);
-        }
-      });
+      if (!connection._hasListeners) {
+        connection._hasListeners = true;
 
-      connection.on(VoiceConnectionStatus.Destroyed, () => {
-        status.connected = false;
-        setTimeout(connectVoice, 1000);
-      });
+        connection.on(VoiceConnectionStatus.Disconnected, async () => {
+          status.connected = false;
+          try {
+            await Promise.race([
+              entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+              entersState(connection, VoiceConnectionStatus.Connecting, 5000)
+            ]);
+          } catch (_) {
+            setTimeout(connectVoice, 1000);
+          }
+        });
+      }
 
     } catch (err) {
       console.error('[Bot 1] Error conectando voz:', err.message);
@@ -139,33 +139,48 @@ function createBot1(config, sendWebhook) {
     );
   });
 
-  // Escudo anti-kick
+  // Escudo anti-kick y anti-movimiento no autorizado
   client.on('voiceStateUpdate', async (oldState, newState) => {
-    if (oldState.member?.id === client.user?.id) {
-      if (!newState.channelId) {
-        status.kicksBlocked++;
-        console.log(`🛡️ [Bot 1] Intento de expulsión neutralizado (#${status.kicksBlocked}). Reconectando en 500ms...`);
-        setTimeout(connectVoice, 500);
-        sendWebhook(
-          '[Bot 1] Intento de Expulsión Bloqueado',
-          `Alguien intentó sacar a **${client.user?.tag}** del canal de voz.\n🛡️ **Escudo Activado:** Reconectado en 500ms.\n**Total bloqueados:** ${status.kicksBlocked}`,
-          0xffaa00
-        );
-      } else if (newState.channelId !== config.channelId) {
-        setTimeout(connectVoice, 500);
-      }
+    // Solo reaccionar a cambios de este bot
+    if (newState.id !== client.user?.id) return;
+
+    const currentChannelId = newState.channelId;
+
+    if (!currentChannelId) {
+      status.kicksBlocked++;
+      status.connected = false;
+      console.log(`🛡️ [Bot 1] Expulsión neutralizada (#${status.kicksBlocked}). Reconectando de inmediato a ${config.channelId}...`);
+      setTimeout(connectVoice, 500);
+      sendWebhook(
+        '[Bot 1] Intento de Expulsión Bloqueado',
+        `Alguien intentó sacar a **${client.user?.tag}** del canal de voz.\n🛡️ **Escudo Activado:** Reconectado en 500ms.\n**Total bloqueados:** ${status.kicksBlocked}`,
+        0xffaa00
+      );
+    } else if (currentChannelId !== config.channelId) {
+      status.kicksBlocked++;
+      console.log(`🛡️ [Bot 1] Movimiento no autorizado a ${currentChannelId}. Regresando a canal objetivo ${config.channelId}...`);
+      setTimeout(connectVoice, 500);
+      sendWebhook(
+        '[Bot 1] Movimiento Neutralizado',
+        `Alguien intentó mover a **${client.user?.tag}** a otro canal de voz.\n🛡️ **Escudo Activado:** Regresado de inmediato a <#${config.channelId}>.\n**Total intervenciones:** ${status.kicksBlocked}`,
+        0xffaa00
+      );
+    } else {
+      status.connected = true;
     }
   });
 
-  // Guardián cada 15 segundos
-  setInterval(() => {
+  // Guardián cada 10 segundos
+  setInterval(async () => {
     if (!client.isReady()) return;
-    const channel = client.channels.cache.get(config.channelId);
-    const inChannel = channel?.members?.has(client.user?.id);
-    if (!inChannel || !connection || (connection.state.status !== VoiceConnectionStatus.Ready && connection.state.status !== VoiceConnectionStatus.Connecting && connection.state.status !== VoiceConnectionStatus.Signalling)) {
-      connectVoice();
-    }
-  }, 15000);
+    try {
+      const channel = await client.channels.fetch(config.channelId).catch(() => null);
+      const isHere = channel?.members?.has(client.user?.id);
+      if (!isHere || !connection || connection.state.status !== VoiceConnectionStatus.Ready) {
+        connectVoice();
+      }
+    } catch (_) {}
+  }, 10000);
 
   client.login(config.token).catch(err => {
     console.error('[Bot 1] Error en login:', err.message);
