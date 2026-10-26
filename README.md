@@ -1,48 +1,63 @@
-# 🔊 Rafa Discord 24/7 Voice Bot (Blindado)
+# 🤖 Rafa Discord 3-Bots Hub 24/7 (Multi-Channel Blindado)
 
-Bot de Discord diseñado para mantenerse conectado **24/7/365 en un canal de voz específico** con sistema de **auto-reconexión instantánea**, **escudo anti-expulsión** y transmisión continua de silencio Opus para evitar que Discord lo desconecte por inactividad.
-
-🎯 **Meta:** Alcanzar 1,000,000,000 (1 Billón) de horas conectado sin apagarse.
+Hub central para ejecutar **3 Bots de Discord simultáneos y permanentes 24/7/365** en el servidor `RAFA PANEL`, con **aislamiento de voz por grupo**, **soporte para protocolo E2EE DAVE**, **escudo anti-kick**, y panel de monitoreo web.
 
 ---
 
-## 🛡️ Características del Sistema Blindado
+## 👥 Resumen de los 3 Bots
 
-1. **Auto-Reconexión Instantánea (Anti-Kick):**
-   - Si un usuario o administrador intenta desconectar al bot, el evento `voiceStateUpdate` lo detecta y se **reconecta en 500ms automáticamente**.
-   - Si alguien mueve al bot a otro canal de voz, regresa de inmediato al canal objetivo.
-2. **Guardián de Canal Recurrente:**
-   - Cada 15 segundos revisa si el bot sigue en el canal. Si por alguna razón la conexión se perdió, se re-establece de inmediato.
-3. **Transmisión de Silencio Opus Continua:**
-   - Discord desconecta bots de voz si no hay actividad de audio. Este bot transmite paquetes continuos de silencio Opus (3 bytes) que no se escuchan pero mantienen la conexión de voz activa 24/7.
-4. **Contador de Tiempo Acumulado:**
-   - Guarda el tiempo en `uptime.json` para que nunca se pierda el progreso hacia el billón de horas.
-5. **Servidor Web de Monitoreo:**
-   - Corre en el puerto `8080` (compatible con Railway / Render / UptimeRobot) con un panel en HTML que muestra las horas acumuladas, estado en vivo y estadísticas de expulsiones evitadas.
-6. **Alertas a Discord por Webhook:**
-   - Envía alertas automáticas cuando se inicia, cuando neutraliza un intento de desconexión y reportes de estado periódicos.
+| Bot | Tag | Canal de Voz Objetivo | Función |
+| :--- | :--- | :--- | :--- |
+| **Bot 1** | `Rafa craker#2586` | `BOTS SERVIDOR` (`1542358479270846565`) | 🛡️ Escudo 24/7 permanente (Meta: 1 Billón de Horas) |
+| **Bot 2** | `RafaModzYT TTS#9987` | `general` (`1556120992579846224`) | 🗣️ Lector TTS (Lee chats de voz en voz alta con `/tts` o mención) |
+| **Bot 3** | `RafaModzYT Music#0218` | Canal ID: `1557674216340586507` | 📻 Radio & Música 24/7 (Lo-Fi, Reggaeton, Pop, Rock, etc.) |
 
 ---
 
-## 🚀 Despliegue en Railway (Desde GitHub)
+## 🛡️ Características Principales
 
-Este repositorio está conectado a:
-`https://github.com/purorodriguez903-oss/discordbotsiarafadconline.git`
+1. **Aislamiento de Voz por Grupo (`group: client.user.id`):** Cada bot opera en su propio canal de voz sin interferir ni sobreescribir la conexión de los demás.
+2. **Auto-Reconexión Anti-Kick (500ms):** Si un usuario desconecta o mueve a cualquiera de los bots, el bot regresa de inmediato a su canal asignado.
+3. **Protocolo DAVE / E2EE Compatible:** Totalmente adaptado a las nuevas exigencias de encriptación punto a punto de Discord con `@snazzah/davey` y `@discordjs/voice`.
+4. **Transmisión de Silencio Continuo:** Paquetes Opus silenciosos que evitan que Discord marque a los bots como inactivos.
+5. **Dashboard Web en Vivo:** Monitoreo en el puerto `8080` (endpoint `/health`) con vista HTML y estado en tiempo real.
 
-### Pasos para activar en Railway 24/7:
+---
+
+## 🚀 Despliegue 24/7 en la Nube (Railway)
+
+Para que los bots se queden **online para siempre sin depender de que tu PC esté encendida**:
+
+### 1. Conectar Repositorio
 1. Entra a [Railway.app](https://railway.app).
 2. Toca **+ New Project** > **Deploy from GitHub repo**.
-3. Selecciona tu repositorio: `purorodriguez903-oss/discordbotsiarafadconline`.
-4. Ve a la pestaña **Variables** en Railway y agrega estas 4 variables:
-   - `DISCORD_TOKEN`: Tu token de bot de Discord
-   - `VOICE_CHANNEL_ID`: `1542358479270846565`
-   - `WEBHOOK_URL`: Tu webhook de Discord para alertas
-   - `PORT`: `8080`
-5. ¡Listo! Railway desplegará el bot automáticamente y se mantendrá en línea 24/7 en la nube.
+3. Selecciona: `purorodriguez903-oss/discordbotsiarafadconline`.
+
+### 2. Configurar Variables de Entorno
+En el servicio creado en Railway, entra a la pestaña **Variables** y agrega:
+
+```env
+BOT1_TOKEN=tu_token_del_bot1
+BOT1_APP_ID=1564175866920050718
+BOT1_VOICE_CHANNEL_ID=1542358479270846565
+
+BOT2_TOKEN=tu_token_del_bot2
+BOT2_APP_ID=1564177861349474407
+BOT2_VOICE_CHANNEL_ID=1556120992579846224
+
+BOT3_TOKEN=tu_token_del_bot3
+BOT3_APP_ID=1564178086487003177
+BOT3_VOICE_CHANNEL_ID=1557674216340586507
+
+WEBHOOK_URL=tu_webhook_de_discord
+PORT=8080
+```
+
+¡Listo! Railway compilará el proyecto usando `nixpacks.toml` con Node.js 20 y FFmpeg, e iniciará todos los bots automáticamente.
 
 ---
 
 ## 💻 Ejecución Local en Windows
 
-Haz doble clic en:
-**`iniciar_discord_bot.bat`**
+Si prefieres correrlo en tu computadora:
+Doble clic en **`iniciar_discord_bot.bat`**.
