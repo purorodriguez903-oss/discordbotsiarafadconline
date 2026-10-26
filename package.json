@@ -1,0 +1,19 @@
+{
+  "name": "rafa-discord-voice-24-7",
+  "version": "1.0.0",
+  "description": "Bot de Discord 24/7 para canales de voz con reconexión automática infinita",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "opusscript": "^0.1.1",
+    "tweetnacl": "^1.0.3"
+  }
+}
